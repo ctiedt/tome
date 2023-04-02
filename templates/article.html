@@ -1,0 +1,12 @@
+{%extends "meta.html" %}
+
+{% block body %}
+<h1>{{title}}</h1>
+
+<a role="button" href="/edit/article/{{self.path()}}">Edit this page</a>
+<hr />
+
+<div>
+    {{content.as_str()|markdown}}
+</div>
+{% endblock %}

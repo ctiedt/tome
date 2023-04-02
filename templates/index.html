@@ -1,0 +1,9 @@
+{%extends "meta.html" %}
+
+{% block body %}
+<a role="button" href="/edit/index">Edit this page</a>
+
+{{content.as_str()|custom_md}}
+
+
+{% endblock %}

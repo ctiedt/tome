@@ -1,0 +1,27 @@
+{%extends "meta.html" %}
+
+{% block body %}
+<h1>Create or edit an article</h1>
+
+{% if is_index %}
+
+<form id="index-editor" action="/" method="post">
+    <h2>Edit the Index page</h2>
+
+    <textarea name="content">{{content}}</textarea>
+    <input type="submit" />
+</form>
+
+{% else %}
+
+<form id="article-editor" action="/article/{{title}}" method="post">
+    <label>Article Name</label>
+    <input type="text" name="title" value="{{title}}" />
+
+    <textarea name="content">{{content}}</textarea>
+    <input type="submit" />
+</form>
+
+{% endif %}
+
+{% endblock %}
