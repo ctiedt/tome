@@ -70,7 +70,10 @@ impl TomeState {
             let article = article.unwrap();
             let metadata = article.metadata().await.unwrap();
             if metadata.is_file() && article.file_name().to_string_lossy().ends_with(".md") {
-                let title = article.file_name().to_string_lossy().replace(".md", "");
+                let title =
+                    urlencoding::decode(&article.file_name().to_string_lossy().replace(".md", ""))
+                        .unwrap()
+                        .into_owned();
                 articles.insert(
                     title.clone(),
                     Article {
@@ -145,13 +148,13 @@ async fn post_article(
         existing.content = article.content;
         existing.clone()
     } else {
-        state.articles.insert(title, article.clone());
+        state.articles.insert(title.clone(), article.clone());
         article
     };
 
     article.write_to_disk().await.unwrap();
 
-    article
+    Redirect::to(&format!("/article/{title}"))
 }
 
 #[debug_handler]
@@ -163,7 +166,7 @@ async fn update_index(
     state.index = index;
     state.index.write_to_disk().await.unwrap();
 
-    state.index.clone()
+    Redirect::to("/")
 }
 
 #[axum_macros::debug_handler]

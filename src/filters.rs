@@ -1,3 +1,10 @@
+/// # Custom Markdown Filter
+///
+/// askama has a Markdown filter, but that relies on comrak.
+/// While comrak is generally great for parsing and rendering
+/// Markdown, it lacks some configuration options tome needs (specifically,
+/// rewriting broken links). This means we use a custom filter to
+/// render Markdown using the pulldown_cmark crate.
 use askama::MarkupDisplay;
 use pulldown_cmark::{html, BrokenLink, CowStr, Event, LinkType, Options, Tag};
 
