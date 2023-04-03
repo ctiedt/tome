@@ -1,0 +1,13 @@
+{% extends "meta.html" %}
+
+{% block body %}
+
+<ul>
+    {% for (article, title) in articles %}
+    <li>
+        <a href="/article/{{article}}">{{title}}</a>
+    </li>
+    {% endfor %}
+</ul>
+
+{% endblock %}

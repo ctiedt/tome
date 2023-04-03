@@ -1,21 +1,18 @@
 mod filters;
 
-use std::collections::HashMap;
-use std::sync::Arc;
-
 use askama::Template;
-use axum::extract::{Path, State};
+use axum::extract::Path;
 use axum::response::{IntoResponse, Redirect};
 use axum::routing::{get, post};
 use axum::{Form, Router};
 use axum_macros::debug_handler;
+
 use futures::StreamExt;
 use serde::Deserialize;
-use tokio::sync::Mutex;
 use tokio_stream::wrappers::ReadDirStream;
 
 #[derive(Template, Clone, Deserialize)]
-#[template(path = "article.html")]
+#[template(path = "article.html", escape = "none")]
 struct Article {
     title: String,
     content: String,
@@ -33,6 +30,17 @@ impl Article {
         )
         .await
     }
+
+    async fn load(title: &str) -> Option<Self> {
+        let path = format!("content/articles/{}.md", urlencoding::encode(title));
+        match tokio::fs::read_to_string(&path).await {
+            Ok(content) => Some(Article {
+                title: title.to_string(),
+                content,
+            }),
+            Err(_) => None,
+        }
+    }
 }
 
 #[derive(Template, Clone)]
@@ -49,70 +57,54 @@ struct Index {
     content: String,
 }
 
+#[derive(Template, Deserialize, Clone, Default)]
+#[template(path = "overview.html")]
+struct Overview {
+    articles: Vec<(String, String)>,
+}
+
+impl Overview {
+    async fn load() -> Self {
+        let mut entries =
+            ReadDirStream::new(tokio::fs::read_dir("content/articles").await.unwrap());
+        let mut articles = vec![];
+        while let Some(Ok(entry)) = entries.next().await {
+            let filename = entry.file_name().into_string().unwrap();
+            if filename.ends_with(".md") {
+                let article = filename.replace(".md", "");
+                let title = urlencoding::decode(&article).unwrap().into_owned();
+                articles.push((article, title))
+            }
+        }
+        Overview { articles }
+    }
+}
+
 impl Index {
     async fn write_to_disk(&self) -> tokio::io::Result<()> {
         tokio::fs::write("content/index.md", self.content.as_bytes()).await
     }
-}
 
-#[derive(Default)]
-struct TomeState {
-    articles: HashMap<String, Article>,
-    index: Index,
-}
-
-impl TomeState {
     async fn load() -> Self {
-        let mut articles = HashMap::new();
-        let mut entries =
-            ReadDirStream::new(tokio::fs::read_dir("content/articles").await.unwrap());
-        while let Some(article) = entries.next().await {
-            let article = article.unwrap();
-            let metadata = article.metadata().await.unwrap();
-            if metadata.is_file() && article.file_name().to_string_lossy().ends_with(".md") {
-                let title =
-                    urlencoding::decode(&article.file_name().to_string_lossy().replace(".md", ""))
-                        .unwrap()
-                        .into_owned();
-                articles.insert(
-                    title.clone(),
-                    Article {
-                        title,
-                        content: tokio::fs::read_to_string(article.path()).await.unwrap(),
-                    },
-                );
-            }
-        }
-        let index = Index {
-            content: tokio::fs::read_to_string("content/index.md").await.unwrap(),
-        };
-        Self { articles, index }
+        let content = tokio::fs::read_to_string("content/index.md").await.unwrap();
+        Index { content }
     }
 }
 
-async fn get_article(
-    Path(title): Path<String>,
-    State(state): State<Arc<Mutex<TomeState>>>,
-) -> impl IntoResponse {
-    let state = state.lock().await;
+async fn get_article(Path(title): Path<String>) -> impl IntoResponse {
     let title = urlencoding::decode(&title).unwrap().into_owned();
-    if let Some(article) = state.articles.get(&title) {
-        article.clone().into_response()
+    if let Some(article) = Article::load(&title).await {
+        article.into_response()
     } else {
         Redirect::temporary(&format!("/edit/article/{title}")).into_response()
     }
 }
 
-async fn edit_article(
-    Path(title): Path<String>,
-    State(state): State<Arc<Mutex<TomeState>>>,
-) -> impl IntoResponse {
-    let state = state.lock().await;
+async fn edit_article(Path(title): Path<String>) -> impl IntoResponse {
     let title = urlencoding::decode(&title).unwrap().into_owned();
-    dbg!(&title);
 
-    let content = if let Some(article) = state.articles.get(&title) {
-        article.content.clone()
+    let content = if let Some(article) = Article::load(&title).await {
+        article.content
     } else {
         String::new()
     };
@@ -124,68 +116,49 @@ async fn edit_article(
     .into_response()
 }
 
-async fn edit_index(State(state): State<Arc<Mutex<TomeState>>>) -> impl IntoResponse {
-    let state = state.lock().await;
+async fn edit_index() -> impl IntoResponse {
+    let index = Index::load().await;
     Editor {
         is_index: true,
         title: String::new(),
-        content: state.index.content.clone(),
+        content: index.content,
     }
     .into_response()
 }
 
 #[axum_macros::debug_handler]
-async fn post_article(
-    State(state): State<Arc<Mutex<TomeState>>>,
-    Form(article): Form<Article>,
-) -> impl IntoResponse {
-    let mut state = state.lock().await;
-
-    let title = article.title.clone();
-    dbg!(&title);
-
-    let article = if let Some(mut existing) = state.articles.get_mut(&title) {
-        existing.content = article.content;
-        existing.clone()
-    } else {
-        state.articles.insert(title.clone(), article.clone());
-        article
-    };
-
+async fn post_article(Form(article): Form<Article>) -> impl IntoResponse {
     article.write_to_disk().await.unwrap();
 
-    Redirect::to(&format!("/article/{title}"))
+    Redirect::to(&format!("/article/{}", article.title))
 }
 
 #[debug_handler]
-async fn update_index(
-    State(state): State<Arc<Mutex<TomeState>>>,
-    Form(index): Form<Index>,
-) -> impl IntoResponse {
-    let mut state = state.lock().await;
-    state.index = index;
-    state.index.write_to_disk().await.unwrap();
+async fn update_index(Form(index): Form<Index>) -> impl IntoResponse {
+    index.write_to_disk().await.unwrap();
 
     Redirect::to("/")
 }
 
 #[axum_macros::debug_handler]
-async fn get_index(State(state): State<Arc<Mutex<TomeState>>>) -> impl IntoResponse {
-    state.lock().await.index.clone()
+async fn get_index() -> impl IntoResponse {
+    Index::load().await
+}
+
+async fn get_overview() -> impl IntoResponse {
+    Overview::load().await
 }
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
-    let state = Arc::new(Mutex::new(TomeState::load().await));
-
     let router = Router::new()
         .route("/", get(get_index))
         .route("/", post(update_index))
+        .route("/overview", get(get_overview))
         .route("/article/:id", get(get_article))
         .route("/edit/article/:id", get(edit_article))
         .route("/edit/index", get(edit_index))
-        .route("/article/:id", post(post_article))
-        .with_state(state);
+        .route("/article/:id", post(post_article));
 
     let addr = "0.0.0.0:8000".parse()?;
 
