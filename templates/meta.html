@@ -2,19 +2,59 @@
 <html>
 
 <head>
-    <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@1.*/css/pico.min.css">
-    {% block head %}{% endblock %}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    {% block head %}
+    <title>
+        {% block title %}{% endblock %} | Tome
+    </title>
+    {% endblock %}
+
 </head>
 
 <body>
-    <nav>
-        <a href="/">Home</a>
-    </nav>
-    {% block body %}{% endblock %}
-</body>
+    <nav class="navbar" role="navigation">
+        <div class="navbar-brand">
+            <a class="navbar-item" href="/">
+                <img src="/media/tome.png" />
+            </a>
 
-<footer>
-    Tome - A Rusty Wiki | <a href="/overview">All articles</a>
-</footer>
+            <a class="navbar-item" href="/">
+                Home
+            </a>
+
+            <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false"
+                data-target="navbarBasicExample">
+                <span aria-hidden="true"></span>
+                <span aria-hidden="true"></span>
+                <span aria-hidden="true"></span>
+            </a>
+        </div>
+
+        <div class="navbar-menu">
+            <div class="navbar-end">
+                <div class="navbar-item">
+                    {% block navbar_actions %}{% endblock %}
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="columns is-centered">
+
+        <div class="column is-four-fifths">
+            <div class="content">
+                <hr />
+
+                {% block body %}{% endblock %}
+
+                <hr />
+            </div>
+
+            <footer>
+                Tome - A Rusty Wiki | <a href="/overview">All articles</a>
+            </footer>
+        </div>
+    </div>
+</body>
 
 </html>

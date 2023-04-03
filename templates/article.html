@@ -1,10 +1,15 @@
 {%extends "meta.html" %}
 
+{% block title %}
+{{title}}
+{% endblock %}
+
+{% block navbar_actions %}
+<a role="button" href="/edit/article/{{self.path()}}" class="button">Edit this page</a>
+{% endblock %}
+
 {% block body %}
 <h1>{{title}}</h1>
-
-<a role="button" href="/edit/article/{{self.path()}}">Edit this page</a>
-<hr />
 
 <div>
     {{content.as_str()|custom_md}}

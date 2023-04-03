@@ -3,13 +3,14 @@ mod filters;
 use askama::Template;
 use axum::extract::Path;
 use axum::response::{IntoResponse, Redirect};
-use axum::routing::{get, post};
+use axum::routing::{get, get_service, post};
 use axum::{Form, Router};
 use axum_macros::debug_handler;
 
 use futures::StreamExt;
 use serde::Deserialize;
 use tokio_stream::wrappers::ReadDirStream;
+use tower_http::services::{ServeDir, ServeFile};
 
 #[derive(Template, Clone, Deserialize)]
 #[template(path = "article.html", escape = "none")]
@@ -120,7 +121,7 @@ async fn edit_index() -> impl IntoResponse {
     let index = Index::load().await;
     Editor {
         is_index: true,
-        title: String::new(),
+        title: "Index".to_string(),
         content: index.content,
     }
     .into_response()
@@ -158,7 +159,12 @@ async fn main() -> color_eyre::Result<()> {
         .route("/article/:id", get(get_article))
         .route("/edit/article/:id", get(edit_article))
         .route("/edit/index", get(edit_index))
-        .route("/article/:id", post(post_article));
+        .route("/article/:id", post(post_article))
+        .route_service(
+            "/favicon.ico",
+            get_service(ServeFile::new("content/media/favicon.ico")),
+        )
+        .nest_service("/media/", get_service(ServeDir::new("content/media")));
 
     let addr = "0.0.0.0:8000".parse()?;
 
