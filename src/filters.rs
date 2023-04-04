@@ -31,8 +31,6 @@ where
                     } else {
                         dest.to_string()
                     };
-                    dbg!(&link_type);
-                    dbg!(&dest);
                     Tag::Link(link_type, dest.into(), title)
                 }
                 _ => tag,

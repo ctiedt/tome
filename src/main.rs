@@ -1,5 +1,7 @@
 mod filters;
 
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
 use askama::Template;
 use axum::extract::Path;
 use axum::response::{IntoResponse, Redirect};
@@ -7,10 +9,19 @@ use axum::routing::{get, get_service, post};
 use axum::{Form, Router};
 use axum_macros::debug_handler;
 
+use clap::Parser;
+use figment::providers::{Format, Serialized, Toml};
+use figment::Figment;
 use futures::StreamExt;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio_stream::wrappers::ReadDirStream;
 use tower_http::services::{ServeDir, ServeFile};
+
+#[derive(Serialize, Deserialize, Parser)]
+struct TomeConfig {
+    host: Option<IpAddr>,
+    port: Option<u16>,
+}
 
 #[derive(Template, Clone, Deserialize)]
 #[template(path = "article.html", escape = "none")]
@@ -152,6 +163,11 @@ async fn get_overview() -> impl IntoResponse {
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
+    let config: TomeConfig = Figment::new()
+        .merge(Toml::file("tome.toml"))
+        .merge(Serialized::defaults(TomeConfig::parse()))
+        .extract()?;
+
     let router = Router::new()
         .route("/", get(get_index))
         .route("/", post(update_index))
@@ -166,9 +182,14 @@ async fn main() -> color_eyre::Result<()> {
         )
         .nest_service("/media/", get_service(ServeDir::new("content/media")));
 
-    let addr = "0.0.0.0:8000".parse()?;
+    let addr = (
+        config
+            .host
+            .unwrap_or(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
+        config.port.unwrap_or(5422),
+    );
 
-    axum::Server::bind(&addr)
+    axum::Server::bind(&SocketAddr::from(addr))
         .serve(router.into_make_service())
         .await?;
     Ok(())

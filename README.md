@@ -5,7 +5,7 @@ use a database, but just a directory of Markdown files.
 
 ## Todos
 
-- [ ] Configuration (e.g. specific port)
 - [ ] Media Upload
 - [ ] Edit History for articles
-- [ ] User Management
+- [ ] Edit Safety (Locking articles during editing)
+- [ ] User Management (unlikely in the near future)
