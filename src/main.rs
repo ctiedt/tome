@@ -16,6 +16,8 @@ use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use tokio_stream::wrappers::ReadDirStream;
 use tower_http::services::{ServeDir, ServeFile};
+use tracing::Level;
+use tracing_subscriber::FmtSubscriber;
 
 #[derive(Serialize, Deserialize, Parser)]
 struct TomeConfig {
@@ -163,6 +165,12 @@ async fn get_overview() -> impl IntoResponse {
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(Level::TRACE)
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber)?;
+
     let config: TomeConfig = Figment::new()
         .merge(Toml::file("tome.toml"))
         .merge(Serialized::defaults(TomeConfig::parse()))
