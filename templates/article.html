@@ -5,7 +5,8 @@
 {% endblock %}
 
 {% block navbar_actions %}
-<a role="button" href="/edit/article/{{self.path()}}" class="button">Edit this page</a>
+<a href="/article/{{self.path()}}/history" class="navbar-item">History</a>
+<a href="/edit/article/{{self.path()}}" class="navbar-item">Edit this page</a>
 {% endblock %}
 
 {% block body %}

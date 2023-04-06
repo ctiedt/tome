@@ -37,6 +37,16 @@ where
             };
             Event::Start(tag)
         }
+        Event::Html(node) => {
+            let replacement = if node.starts_with("<script") {
+                "<pre><code>"
+            } else if node.starts_with("</script") {
+                "</code></pre>"
+            } else {
+                &node
+            };
+            Event::Html(replacement.to_string().into())
+        }
         _ => event,
     });
     let mut html_out = String::new();

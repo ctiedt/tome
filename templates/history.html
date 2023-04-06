@@ -1,0 +1,19 @@
+{% extends "meta.html" %}
+
+{% block title %}
+Overview
+{% endblock %}
+
+{% block body %}
+
+<h1>History of {{article}}</h1>
+
+<ul>
+    {% for version in versions %}
+    <li>
+        <a href="/article/{{article}}/history/{{version}}">{{version}}</a>
+    </li>
+    {% endfor %}
+</ul>
+
+{% endblock %}

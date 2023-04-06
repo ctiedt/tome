@@ -4,6 +4,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use askama::Template;
 use axum::extract::Path;
+use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect};
 use axum::routing::{get, get_service, post};
 use axum::{Form, Router};
@@ -26,6 +27,10 @@ struct TomeConfig {
 }
 
 #[derive(Template, Clone, Deserialize)]
+#[template(path = "not_found.html", escape = "none")]
+struct NotFound {}
+
+#[derive(Template, Clone, Deserialize)]
 #[template(path = "article.html", escape = "none")]
 struct Article {
     title: String,
@@ -38,15 +43,38 @@ impl Article {
     }
 
     async fn write_to_disk(&self) -> tokio::io::Result<()> {
+        let _ = tokio::fs::create_dir(format!("content/articles/{}", self.path())).await;
+
+        let mut versions = ReadDirStream::new(
+            tokio::fs::read_dir(format!("content/articles/{}", self.path()))
+                .await
+                .unwrap(),
+        );
+
+        let mut idx = 0;
+
+        while let Some(entry) = versions.next().await {
+            let file_name = entry.unwrap().file_name().to_string_lossy().into_owned();
+            if file_name.ends_with(".md") && file_name != "current.md" {
+                idx += 1;
+            }
+        }
+
         tokio::fs::write(
-            format!("content/articles/{}.md", self.path()),
+            format!("content/articles/{}/{}.md", self.path(), idx),
+            self.content.as_bytes(),
+        )
+        .await?;
+
+        tokio::fs::write(
+            format!("content/articles/{}/current.md", self.path()),
             self.content.as_bytes(),
         )
         .await
     }
 
     async fn load(title: &str) -> Option<Self> {
-        let path = format!("content/articles/{}.md", urlencoding::encode(title));
+        let path = format!("content/articles/{}/current.md", urlencoding::encode(title));
         match tokio::fs::read_to_string(&path).await {
             Ok(content) => Some(Article {
                 title: title.to_string(),
@@ -54,6 +82,39 @@ impl Article {
             }),
             Err(_) => None,
         }
+    }
+
+    async fn load_version(title: &str, version: &str) -> Option<Self> {
+        let path = format!(
+            "content/articles/{}/{version}.md",
+            urlencoding::encode(title)
+        );
+        match tokio::fs::read_to_string(&path).await {
+            Ok(content) => Some(Article {
+                title: title.to_string(),
+                content,
+            }),
+            Err(_) => None,
+        }
+    }
+
+    async fn get_versions(title: &str) -> Vec<String> {
+        let mut entries = ReadDirStream::new(
+            tokio::fs::read_dir(format!("content/articles/{}", urlencoding::encode(&title)))
+                .await
+                .unwrap(),
+        );
+
+        let mut versions = vec![];
+
+        while let Some(Ok(entry)) = entries.next().await {
+            let file_name = entry.file_name().to_string_lossy().into_owned();
+            if file_name.ends_with(".md") {
+                versions.push(file_name.replace(".md", ""));
+            }
+        }
+
+        versions
     }
 }
 
@@ -75,6 +136,13 @@ struct Index {
 #[template(path = "overview.html")]
 struct Overview {
     articles: Vec<(String, String)>,
+}
+
+#[derive(Template, Deserialize, Clone, Default)]
+#[template(path = "history.html")]
+struct History {
+    article: String,
+    versions: Vec<String>,
 }
 
 impl Overview {
@@ -111,6 +179,21 @@ async fn get_article(Path(title): Path<String>) -> impl IntoResponse {
         article.into_response()
     } else {
         Redirect::temporary(&format!("/edit/article/{title}")).into_response()
+    }
+}
+
+async fn article_history(Path(title): Path<String>) -> impl IntoResponse {
+    History {
+        article: title.clone(),
+        versions: Article::get_versions(&title).await,
+    }
+}
+
+async fn article_version(Path((title, version)): Path<(String, String)>) -> impl IntoResponse {
+    if let Some(article) = Article::load_version(&title, &version).await {
+        article.into_response()
+    } else {
+        (StatusCode::NOT_FOUND, NotFound {}).into_response()
     }
 }
 
@@ -184,11 +267,14 @@ async fn main() -> color_eyre::Result<()> {
         .route("/edit/article/:id", get(edit_article))
         .route("/edit/index", get(edit_index))
         .route("/article/:id", post(post_article))
+        .route("/article/:id/history/:version", get(article_version))
+        .route("/article/:id/history", get(article_history))
         .route_service(
             "/favicon.ico",
             get_service(ServeFile::new("content/media/favicon.ico")),
         )
-        .nest_service("/media/", get_service(ServeDir::new("content/media")));
+        .nest_service("/media/", get_service(ServeDir::new("content/media")))
+        .fallback(|| async { NotFound {} });
 
     let addr = (
         config
