@@ -9,7 +9,7 @@ edition = "2021"
 askama = { version = "0.12.0", features = ["with-axum", "markdown"] }
 askama_axum = "0.3.0"
 askama_escape = "0.10.3"
-axum = "0.6.12"
+axum = { version = "0.6.12", features = ["multipart"] }
 axum-macros = "0.3.7"
 clap = { version = "4.2.1", features = ["derive"] }
 color-eyre = "0.6.2"

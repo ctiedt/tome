@@ -1,4 +1,5 @@
 mod filters;
+mod media;
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
@@ -14,16 +15,18 @@ use clap::Parser;
 use figment::providers::{Format, Serialized, Toml};
 use figment::Figment;
 use futures::StreamExt;
+use media::{get_media_overview, post_media};
 use serde::{Deserialize, Serialize};
 use tokio_stream::wrappers::ReadDirStream;
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
-#[derive(Serialize, Deserialize, Parser)]
-struct TomeConfig {
+#[derive(Serialize, Deserialize, Parser, Clone)]
+pub struct TomeConfig {
     host: Option<IpAddr>,
     port: Option<u16>,
+    allowed_uploads: Vec<String>,
 }
 
 #[derive(Template, Clone, Deserialize)]
@@ -256,8 +259,10 @@ async fn main() -> color_eyre::Result<()> {
 
     let config: TomeConfig = Figment::new()
         .merge(Toml::file("tome.toml"))
-        .merge(Serialized::defaults(TomeConfig::parse()))
+        .join(Serialized::defaults(TomeConfig::parse()))
         .extract()?;
+
+    dbg!(&config.allowed_uploads);
 
     let router = Router::new()
         .route("/", get(get_index))
@@ -269,12 +274,15 @@ async fn main() -> color_eyre::Result<()> {
         .route("/article/:id", post(post_article))
         .route("/article/:id/history/:version", get(article_version))
         .route("/article/:id/history", get(article_history))
+        .route("/media", get(get_media_overview))
+        .route("/media", post(post_media))
         .route_service(
             "/favicon.ico",
             get_service(ServeFile::new("content/media/favicon.ico")),
         )
         .nest_service("/media/", get_service(ServeDir::new("content/media")))
-        .fallback(|| async { NotFound {} });
+        .fallback(|| async { NotFound {} })
+        .with_state(config.clone());
 
     let addr = (
         config
