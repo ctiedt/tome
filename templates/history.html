@@ -8,12 +8,17 @@ Overview
 
 <h1>History of {{article}}</h1>
 
-<ul>
-    {% for version in versions %}
-    <li>
-        <a href="/article/{{article}}/history/{{version}}">{{version}}</a>
-    </li>
+<table>
+    {% for (version, edited) in versions %}
+    <tr>
+        <td>
+            <a href="/article/{{article}}/history/{{version}}">{{version}}</a>
+        </td>
+        <td>
+            <p>{{edited}}</p>
+        </td>
+    </tr>
     {% endfor %}
-</ul>
+</table>
 
 {% endblock %}

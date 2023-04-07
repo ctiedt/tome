@@ -2,6 +2,7 @@ mod filters;
 mod media;
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::time::SystemTime;
 
 use askama::Template;
 use axum::extract::Path;
@@ -17,6 +18,7 @@ use figment::Figment;
 use futures::StreamExt;
 use media::{get_media_overview, post_media};
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 use tokio_stream::wrappers::ReadDirStream;
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::Level;
@@ -48,23 +50,12 @@ impl Article {
     async fn write_to_disk(&self) -> tokio::io::Result<()> {
         let _ = tokio::fs::create_dir(format!("content/articles/{}", self.path())).await;
 
-        let mut versions = ReadDirStream::new(
-            tokio::fs::read_dir(format!("content/articles/{}", self.path()))
-                .await
-                .unwrap(),
-        );
-
-        let mut idx = 0;
-
-        while let Some(entry) = versions.next().await {
-            let file_name = entry.unwrap().file_name().to_string_lossy().into_owned();
-            if file_name.ends_with(".md") && file_name != "current.md" {
-                idx += 1;
-            }
-        }
-
         tokio::fs::write(
-            format!("content/articles/{}/{}.md", self.path(), idx),
+            format!(
+                "content/articles/{}/{}.md",
+                self.path(),
+                uuid::Uuid::new_v4().hyphenated()
+            ),
             self.content.as_bytes(),
         )
         .await?;
@@ -101,9 +92,9 @@ impl Article {
         }
     }
 
-    async fn get_versions(title: &str) -> Vec<String> {
+    async fn get_versions(title: &str) -> Vec<(String, SystemTime)> {
         let mut entries = ReadDirStream::new(
-            tokio::fs::read_dir(format!("content/articles/{}", urlencoding::encode(&title)))
+            tokio::fs::read_dir(format!("content/articles/{}", urlencoding::encode(title)))
                 .await
                 .unwrap(),
         );
@@ -111,9 +102,15 @@ impl Article {
         let mut versions = vec![];
 
         while let Some(Ok(entry)) = entries.next().await {
+            let edited = entry
+                .metadata()
+                .await
+                .unwrap()
+                .modified()
+                .expect("File Access Time should be available");
             let file_name = entry.file_name().to_string_lossy().into_owned();
             if file_name.ends_with(".md") {
-                versions.push(file_name.replace(".md", ""));
+                versions.push((file_name.replace(".md", ""), edited));
             }
         }
 
@@ -145,7 +142,7 @@ struct Overview {
 #[template(path = "history.html")]
 struct History {
     article: String,
-    versions: Vec<String>,
+    versions: Vec<(String, String)>,
 }
 
 impl Overview {
@@ -154,9 +151,8 @@ impl Overview {
             ReadDirStream::new(tokio::fs::read_dir("content/articles").await.unwrap());
         let mut articles = vec![];
         while let Some(Ok(entry)) = entries.next().await {
-            let filename = entry.file_name().into_string().unwrap();
-            if filename.ends_with(".md") {
-                let article = filename.replace(".md", "");
+            let article = entry.file_name().into_string().unwrap();
+            if entry.file_type().await.unwrap().is_dir() {
                 let title = urlencoding::decode(&article).unwrap().into_owned();
                 articles.push((article, title))
             }
@@ -186,9 +182,23 @@ async fn get_article(Path(title): Path<String>) -> impl IntoResponse {
 }
 
 async fn article_history(Path(title): Path<String>) -> impl IntoResponse {
+    let mut versions: Vec<(String, SystemTime)> = Article::get_versions(&title).await;
+    versions.sort_by_key(|(_, edited)| *edited);
+    versions.reverse();
+
     History {
         article: title.clone(),
-        versions: Article::get_versions(&title).await,
+        versions: versions
+            .into_iter()
+            .map(|(article, edited)| {
+                (
+                    article,
+                    OffsetDateTime::from(edited)
+                        .format(&time::format_description::well_known::Rfc2822)
+                        .unwrap(),
+                )
+            })
+            .collect(),
     }
 }
 

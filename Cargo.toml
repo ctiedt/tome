@@ -17,9 +17,12 @@ figment = { version = "0.10.8", features = ["toml"] }
 futures = "0.3.28"
 pulldown-cmark = "0.9.2"
 serde = { version = "1.0.159", features = ["derive"] }
+time = { version = "0.3.20", features = ["formatting"] }
 tokio = { version = "1.27.0", features = ["full"] }
 tokio-stream = { version = "0.1.12", features = ["fs"] }
 tower-http = { version = "0.4.0", features = ["fs"] }
 tracing = "0.1.37"
 tracing-subscriber = "0.3.16"
 urlencoding = "2.1.2"
+uuid = { version = "1.3.0", features = ["v4"] }
+yaml-front-matter = "0.1.0"
