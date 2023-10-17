@@ -295,9 +295,7 @@ async fn main() -> color_eyre::Result<()> {
         .with_state(config.clone());
 
     let addr = (
-        config
-            .host
-            .unwrap_or(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
+        config.host.unwrap_or(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))),
         config.port.unwrap_or(5422),
     );
 
